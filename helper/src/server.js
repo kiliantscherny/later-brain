@@ -36,16 +36,20 @@ export function readBody(req, limit = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let data = '';
     let size = 0;
-    req.on('data', (c) => {
+    let over = false;
+    const onData = (c) => {
+      if (over) return;
       size += c.length;
       if (size > limit) {
+        over = true;
+        req.removeListener('data', onData);
         reject(new Error('body_too_large'));
-        req.destroy();
         return;
       }
       data += c;
-    });
-    req.on('end', () => resolve(data));
+    };
+    req.on('data', onData);
+    req.on('end', () => { if (!over) resolve(data); });
     req.on('error', reject);
   });
 }
@@ -61,11 +65,18 @@ export function createServer(config, pipeline) {
       if (!tokenMatches(req.headers['x-later-brain-token'], config.token)) {
         return send(req, res, 401, { ok: false, error: 'unauthorized' });
       }
+      if (Number(req.headers['content-length'] || 0) > MAX_BODY) {
+        res.setHeader('Connection', 'close');
+        return send(req, res, 413, { ok: false, error: 'body_too_large' });
+      }
       let url;
       try {
         url = JSON.parse(await readBody(req)).url;
       } catch (e) {
-        if (e.message === 'body_too_large') return send(req, res, 413, { ok: false, error: 'body_too_large' });
+        if (e.message === 'body_too_large') {
+          res.setHeader('Connection', 'close');
+          return send(req, res, 413, { ok: false, error: 'body_too_large' });
+        }
         url = null;
       }
       if (!url) return send(req, res, 400, { ok: false, error: 'missing_url' });
