@@ -1,3 +1,6 @@
+import { readdirSync } from 'node:fs';
+import { buildPrompt } from './prompt.js';
+
 export function extractJson(stdout) {
   const start = stdout.indexOf('{');
   if (start === -1) throw new Error('no JSON found in Claude output');
@@ -20,4 +23,44 @@ export function extractJson(stdout) {
     }
   }
   throw new Error('no JSON found in Claude output (unbalanced braces)');
+}
+
+export function listNoteTitles(vaultPath, excludeDirs = []) {
+  const excluded = new Set(excludeDirs);
+  const titles = [];
+  function walk(dir, rel) {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const childRel = rel ? `${rel}/${ent.name}` : ent.name;
+      if (ent.isDirectory()) {
+        if (excluded.has(childRel)) continue;
+        walk(`${dir}/${ent.name}`, childRel);
+      } else if (ent.isFile() && ent.name.endsWith('.md')) {
+        titles.push(ent.name.slice(0, -3));
+      }
+    }
+  }
+  walk(vaultPath, '');
+  return titles;
+}
+
+export function filterWikilinks(suggested, titles) {
+  const set = new Set(titles);
+  return (Array.isArray(suggested) ? suggested : []).filter((w) => set.has(w));
+}
+
+function asStringArray(v) {
+  return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+}
+
+export async function summarize({ metadata, transcriptText, noteTitles }, deps) {
+  const prompt = buildPrompt({ metadata, transcriptText, noteTitles });
+  const stdout = await deps.runClaude(prompt);
+  const raw = extractJson(stdout);
+  return {
+    tldr: typeof raw.tldr === 'string' ? raw.tldr : '',
+    keyPoints: asStringArray(raw.keyPoints),
+    quotes: asStringArray(raw.quotes),
+    tags: asStringArray(raw.tags),
+    wikilinks: filterWikilinks(raw.wikilinks, noteTitles),
+  };
 }
