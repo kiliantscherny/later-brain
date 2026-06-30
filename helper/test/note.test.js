@@ -45,3 +45,32 @@ test('buildNote assembles frontmatter, summary, transcript', () => {
   assert.match(md, /## Related\n- \[\[Some Note\]\]/);
   assert.match(md, /> \[!quote\]- Full transcript\n> hello world/);
 });
+
+test('buildNote omits optional sections when arrays/dates are empty/missing', () => {
+  const md = buildNote({
+    metadata: { title: 'Plain', channel: 'Ch', url: 'https://u', uploadDate: '' },
+    summary: { tldr: 'gist', keyPoints: ['p1'], quotes: [], tags: ['t'], wikilinks: [] },
+    transcriptText: 'body',
+    savedDate: '2026-06-30',
+  });
+  assert.doesNotMatch(md, /## Notable quotes/);
+  assert.doesNotMatch(md, /## Related/);
+  assert.doesNotMatch(md, /^published:/m);
+  assert.match(md, /## Key points\n- p1/);
+  assert.match(md, /> \[!quote\]- Full transcript\n> body/);
+});
+
+test('buildNote escapes backslashes and quotes in the YAML title', () => {
+  const md = buildNote({
+    metadata: { title: 'A\\B "C"', channel: '', url: '', uploadDate: '' },
+    summary: { tldr: 't', keyPoints: [], quotes: [], tags: [], wikilinks: [] },
+    transcriptText: 'x',
+    savedDate: '2026-06-30',
+  });
+  assert.match(md, /title: "A\\\\B \\"C\\\""/);
+});
+
+test('sanitizeFilename caps length at 120 chars', () => {
+  const out = sanitizeFilename('a'.repeat(150));
+  assert.equal(out.length, 120);
+});
