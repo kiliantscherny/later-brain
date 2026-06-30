@@ -1,0 +1,9 @@
+{
+  "vaultPath": "/Users/kiliantscherny/Documents/Obsidian/Personal-Vault",
+  "saveSubdir": "Clippings/YouTube",
+  "port": 41484,
+  "token": "REPLACE_WITH_RANDOM_TOKEN",
+  "ytDlpPath": "yt-dlp",
+  "claudePath": "claude",
+  "model": null
+}
