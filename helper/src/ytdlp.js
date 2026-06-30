@@ -8,7 +8,7 @@ const run = promisify(execFile);
 
 export function makeYtDlp(ytDlpPath) {
   async function ytDlpJson(url) {
-    const { stdout } = await run(ytDlpPath, ['-J', '--no-warnings', url], {
+    const { stdout } = await run(ytDlpPath, ['-J', '--no-warnings', '--', url], {
       maxBuffer: 64 * 1024 * 1024,
     });
     return JSON.parse(stdout);
@@ -20,7 +20,7 @@ export function makeYtDlp(ytDlpPath) {
       await run(ytDlpPath, [
         '--skip-download', '--write-subs', '--write-auto-subs',
         '--sub-langs', 'en.*', '--sub-format', 'json3',
-        '-o', join(dir, '%(id)s.%(ext)s'), '--no-warnings', url,
+        '-o', join(dir, '%(id)s.%(ext)s'), '--no-warnings', '--', url,
       ], { maxBuffer: 64 * 1024 * 1024 }).catch(() => {});
       const files = (await readdir(dir)).filter((f) => f.endsWith('.json3'));
       if (files.length === 0) return null;

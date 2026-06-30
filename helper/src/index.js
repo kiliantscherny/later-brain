@@ -9,6 +9,7 @@ import { listNoteTitles, summarize } from './summarize.js';
 import { buildNote, sanitizeFilename, toISODate } from './note.js';
 import { writeNote } from './writer.js';
 import { createServer } from './server.js';
+import { isYouTubeUrl } from './urlcheck.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,11 @@ async function runClaude(prompt) {
 }
 
 async function pipeline(url) {
+  if (!isYouTubeUrl(url)) {
+    const e = new Error('Not a valid YouTube video URL');
+    e.code = 'bad_url';
+    throw e;
+  }
   const { metadata, transcriptText } = await fetchVideo(url, { ytDlpJson, ytDlpSubs });
   const noteTitles = listNoteTitles(config.vaultPath, EXCLUDE);
   const summary = await summarize({ metadata, transcriptText, noteTitles }, { runClaude });

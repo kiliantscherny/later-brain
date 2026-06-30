@@ -1,45 +1,84 @@
 import { createServer as httpCreateServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 
-function send(res, status, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(status, {
-    'content-type': 'application/json',
-    'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'content-type, x-later-brain-token',
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
-  });
-  res.end(body);
+const MAX_BODY = 64 * 1024;
+
+export function tokenMatches(provided, expected) {
+  if (typeof provided !== 'string' || typeof expected !== 'string' || expected.length === 0) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
-function readBody(req) {
-  return new Promise((resolve) => {
+function isLoopbackHost(req) {
+  const host = (req.headers.host || '').split(':')[0].toLowerCase();
+  return host === '127.0.0.1' || host === 'localhost' || host === '[::1]';
+}
+
+function corsHeaders(req) {
+  const h = { 'content-type': 'application/json', vary: 'Origin' };
+  const origin = req.headers.origin;
+  if (typeof origin === 'string' && origin.startsWith('chrome-extension://')) {
+    h['access-control-allow-origin'] = origin;
+    h['access-control-allow-headers'] = 'content-type, x-later-brain-token';
+    h['access-control-allow-methods'] = 'GET, POST, OPTIONS';
+  }
+  return h;
+}
+
+function send(req, res, status, obj) {
+  res.writeHead(status, corsHeaders(req));
+  res.end(JSON.stringify(obj));
+}
+
+export function readBody(req, limit = MAX_BODY) {
+  return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', (c) => { data += c; });
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) {
+        reject(new Error('body_too_large'));
+        req.destroy();
+        return;
+      }
+      data += c;
+    });
     req.on('end', () => resolve(data));
+    req.on('error', reject);
   });
 }
 
 export function createServer(config, pipeline) {
   return httpCreateServer(async (req, res) => {
-    if (req.method === 'OPTIONS') return send(res, 204, {});
+    if (!isLoopbackHost(req)) return send(req, res, 403, { ok: false, error: 'forbidden_host' });
+    if (req.method === 'OPTIONS') return send(req, res, 204, {});
     if (req.method === 'GET' && req.url === '/health') {
-      return send(res, 200, { ok: true, version: '0.1.0' });
+      return send(req, res, 200, { ok: true, version: '0.1.0' });
     }
     if (req.method === 'POST' && req.url === '/save') {
-      if (req.headers['x-later-brain-token'] !== config.token) {
-        return send(res, 401, { ok: false, error: 'unauthorized' });
+      if (!tokenMatches(req.headers['x-later-brain-token'], config.token)) {
+        return send(req, res, 401, { ok: false, error: 'unauthorized' });
       }
       let url;
-      try { url = JSON.parse(await readBody(req)).url; } catch { url = null; }
-      if (!url) return send(res, 400, { ok: false, error: 'missing_url' });
+      try {
+        url = JSON.parse(await readBody(req)).url;
+      } catch (e) {
+        if (e.message === 'body_too_large') return send(req, res, 413, { ok: false, error: 'body_too_large' });
+        url = null;
+      }
+      if (!url) return send(req, res, 400, { ok: false, error: 'missing_url' });
       try {
         const result = await pipeline(url);
-        return send(res, 200, { ok: true, ...result });
+        return send(req, res, 200, { ok: true, ...result });
       } catch (e) {
-        if (e.code === 'no_transcript') return send(res, 422, { ok: false, error: 'no_transcript' });
-        return send(res, 500, { ok: false, error: 'internal', message: e.message });
+        if (e.code === 'bad_url') return send(req, res, 400, { ok: false, error: 'bad_url' });
+        if (e.code === 'no_transcript') return send(req, res, 422, { ok: false, error: 'no_transcript' });
+        console.error('later-brain pipeline error:', e);
+        return send(req, res, 500, { ok: false, error: 'internal' });
       }
     }
-    return send(res, 404, { ok: false, error: 'not_found' });
+    return send(req, res, 404, { ok: false, error: 'not_found' });
   });
 }

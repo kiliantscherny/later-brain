@@ -1,11 +1,26 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from '../src/server.js';
+import { EventEmitter } from 'node:events';
+import { request as httpRequest } from 'node:http';
+import { createServer, tokenMatches, readBody } from '../src/server.js';
 
 const CONFIG = { token: 'secret', port: 0, ytDlpPath: 'yt-dlp', claudePath: 'claude' };
 
 function start(server) {
   return new Promise((res) => server.listen(0, '127.0.0.1', () => res(server.address().port)));
+}
+
+function rawRequest(port, { method = 'GET', path = '/health', headers = {}, body = null }) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ host: '127.0.0.1', port, method, path, headers }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
 }
 
 test('GET /health returns ok', async () => {
@@ -55,5 +70,50 @@ test('POST /save maps no_transcript to 422', async () => {
   const body = await r.json();
   assert.equal(r.status, 422);
   assert.equal(body.error, 'no_transcript');
+  server.close();
+});
+
+test('tokenMatches is exact, length-guarded, and rejects falsy', () => {
+  assert.equal(tokenMatches('secret', 'secret'), true);
+  assert.equal(tokenMatches('Secret', 'secret'), false);
+  assert.equal(tokenMatches('sec', 'secret'), false);
+  assert.equal(tokenMatches('', 'secret'), false);
+  assert.equal(tokenMatches(undefined, 'secret'), false);
+  assert.equal(tokenMatches('secret', ''), false);
+});
+
+test('readBody rejects bodies over the limit', async () => {
+  const fake = new EventEmitter();
+  fake.destroy = () => {};
+  const p = readBody(fake, 10);
+  fake.emit('data', Buffer.from('12345'));
+  fake.emit('data', Buffer.from('678901'));
+  await assert.rejects(p, /body_too_large/);
+});
+
+test('readBody resolves bodies under the limit', async () => {
+  const fake = new EventEmitter();
+  fake.destroy = () => {};
+  const p = readBody(fake, 100);
+  fake.emit('data', Buffer.from('{"url":"x"}'));
+  fake.emit('end');
+  assert.equal(await p, '{"url":"x"}');
+});
+
+test('rejects non-loopback Host (DNS-rebinding defense) with 403', async () => {
+  const server = createServer(CONFIG, async () => ({}));
+  const port = await start(server);
+  const r = await rawRequest(port, { path: '/health', headers: { host: 'evil.com' } });
+  assert.equal(r.status, 403);
+  server.close();
+});
+
+test('reflects chrome-extension Origin only, not web origins', async () => {
+  const server = createServer(CONFIG, async () => ({}));
+  const port = await start(server);
+  const ext = await rawRequest(port, { path: '/health', headers: { host: `127.0.0.1:${port}`, origin: 'chrome-extension://abc' } });
+  assert.equal(ext.headers['access-control-allow-origin'], 'chrome-extension://abc');
+  const web = await rawRequest(port, { path: '/health', headers: { host: `127.0.0.1:${port}`, origin: 'https://evil.com' } });
+  assert.equal(web.headers['access-control-allow-origin'], undefined);
   server.close();
 });
