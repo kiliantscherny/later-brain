@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { width: 280px; font: 13px -apple-system, system-ui, sans-serif; padding: 12px; }
+      button { width: 100%; padding: 8px; font-size: 13px; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #status { margin-top: 10px; white-space: pre-wrap; }
+      a { color: #6c4cf1; }
+    </style>
+  </head>
+  <body>
+    <button id="save" disabled>Save this video</button>
+    <div id="status">Checking…</div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
