@@ -22,7 +22,12 @@ export function toISODate(date) {
 }
 
 function yamlQuote(s) {
-  return `"${String(s ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  const oneLine = String(s ?? '').replace(/[\x00-\x1f]/g, ' ');
+  return `"${oneLine.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function sanitizeTag(t) {
+  return String(t ?? '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 export function foldTranscript(text) {
@@ -43,7 +48,7 @@ export function buildNote({ metadata, summary, transcriptText, savedDate }) {
     ...(published ? [`published: ${published}`] : []),
     `saved: ${savedDate}`,
     'type: youtube',
-    `tags: [${summary.tags.join(', ')}]`,
+    `tags: [${summary.tags.map(sanitizeTag).filter(Boolean).join(', ')}]`,
     '---',
   ].join('\n');
 

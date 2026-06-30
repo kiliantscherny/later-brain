@@ -20,7 +20,7 @@ const EXCLUDE = ['.obsidian', 'Excalidraw', config.saveSubdir];
 async function runClaude(prompt) {
   const args = ['-p', prompt];
   if (config.model) args.push('--model', config.model);
-  const { stdout } = await run(config.claudePath, args, { maxBuffer: 32 * 1024 * 1024 });
+  const { stdout } = await run(config.claudePath, args, { maxBuffer: 32 * 1024 * 1024, timeout: 180000 });
   return stdout;
 }
 

@@ -74,3 +74,24 @@ test('sanitizeFilename caps length at 120 chars', () => {
   const out = sanitizeFilename('a'.repeat(150));
   assert.equal(out.length, 120);
 });
+
+test('buildNote sanitizes tags so they cannot break frontmatter', () => {
+  const md = buildNote({
+    metadata: { title: 'T', channel: '', url: '', uploadDate: '' },
+    summary: { tldr: 't', keyPoints: [], quotes: [], tags: ['Machine Learning', 'x]\ninjected: true', 'c++'], wikilinks: [] },
+    transcriptText: 'b',
+    savedDate: '2026-06-30',
+  });
+  assert.match(md, /tags: \[machine-learning, x-injected-true, c\]/);
+  assert.doesNotMatch(md, /\ninjected: true/);
+});
+
+test('buildNote keeps a newline in the title from breaking YAML frontmatter', () => {
+  const md = buildNote({
+    metadata: { title: 'Line1\nLine2', channel: '', url: '', uploadDate: '' },
+    summary: { tldr: 't', keyPoints: [], quotes: [], tags: [], wikilinks: [] },
+    transcriptText: 'b',
+    savedDate: '2026-06-30',
+  });
+  assert.match(md, /title: "Line1 Line2"/);
+});

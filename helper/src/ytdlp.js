@@ -9,7 +9,7 @@ const run = promisify(execFile);
 export function makeYtDlp(ytDlpPath) {
   async function ytDlpJson(url) {
     const { stdout } = await run(ytDlpPath, ['-J', '--no-warnings', '--', url], {
-      maxBuffer: 64 * 1024 * 1024,
+      maxBuffer: 64 * 1024 * 1024, timeout: 120000,
     });
     return JSON.parse(stdout);
   }
@@ -21,7 +21,7 @@ export function makeYtDlp(ytDlpPath) {
         '--skip-download', '--write-subs', '--write-auto-subs',
         '--sub-langs', 'en.*', '--sub-format', 'json3',
         '-o', join(dir, '%(id)s.%(ext)s'), '--no-warnings', '--', url,
-      ], { maxBuffer: 64 * 1024 * 1024 }).catch(() => {});
+      ], { maxBuffer: 64 * 1024 * 1024, timeout: 120000 }).catch(() => {});
       const files = (await readdir(dir)).filter((f) => f.endsWith('.json3'));
       if (files.length === 0) return null;
       // Prefer a manual (non-auto) track if present; auto tracks contain ".auto." or lang like "en-orig"
