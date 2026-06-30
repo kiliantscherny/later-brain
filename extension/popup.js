@@ -4,6 +4,17 @@ const DEFAULTS = { helperUrl: 'http://127.0.0.1:41484', token: '' };
 const saveBtn = document.getElementById('save');
 const statusEl = document.getElementById('status');
 
+function showStatus(text, link) {
+  statusEl.textContent = text;
+  if (link && typeof link.href === 'string' && /^obsidian:/i.test(link.href)) {
+    statusEl.appendChild(document.createTextNode(' '));
+    const a = document.createElement('a');
+    a.textContent = link.label;
+    a.href = link.href;
+    statusEl.appendChild(a);
+  }
+}
+
 async function getSettings() {
   const s = await chrome.storage.local.get(DEFAULTS);
   return { ...DEFAULTS, ...s };
@@ -18,7 +29,7 @@ async function init() {
   const { helperUrl, token } = await getSettings();
   const url = await activeTabUrl();
   if (!isYouTubeWatchUrl(url)) { statusEl.textContent = 'Open a YouTube video to save it.'; return; }
-  if (!token) { statusEl.innerHTML = 'No token set. Open <b>Options</b> and paste your helper token.'; return; }
+  if (!token) { statusEl.textContent = 'No token set. Open Options and paste your helper token.'; return; }
   try {
     const h = await fetch(`${helperUrl}/health`);
     if (!h.ok) throw new Error();
@@ -39,16 +50,19 @@ async function init() {
       });
       const data = await r.json();
       if (data.ok && data.skipped) {
-        statusEl.innerHTML = `Already saved. <a href="${data.obsidianUri}">Open</a>`;
+        showStatus('Already saved.', { label: 'Open', href: data.obsidianUri });
       } else if (data.ok) {
-        statusEl.innerHTML = `Saved ✓ <a href="${data.obsidianUri}">Open in Obsidian</a>`;
+        showStatus('Saved ✓', { label: 'Open in Obsidian', href: data.obsidianUri });
       } else if (data.error === 'no_transcript') {
         statusEl.textContent = 'No transcript found for this video.';
+        saveBtn.disabled = false;
       } else {
-        statusEl.textContent = `Error: ${data.message || data.error}`;
+        statusEl.textContent = `Error: ${data.error || 'request failed'}`;
+        saveBtn.disabled = false;
       }
     } catch (e) {
       statusEl.textContent = `Request failed: ${e.message}`;
+      saveBtn.disabled = false;
     }
   });
 }
