@@ -1,6 +1,13 @@
-<h1 align="center"><img src="extension/icons/icon128.png" alt="later brain logo" width="128"></h1>
+<p align="center">
+<img src="extension/icons/icon128.png" alt="later brain logo" width="128"></p>
 <h2 align="center">Later Brain</h2>
-<p align="center">Save a YouTube video to your <b>Obsidian</b> vault in one click: the video is embedded, its transcript is fetched, and <b>Claude</b> writes a structured summary with suggested tags and <code>[[wikilinks]]</code> to your existing notes – so it drops straight into your "second brain" for later.</p>
+<p align="center">A simple Chrome extension for saving summaries of YouTube videos to your Obsidian vault.</p>
+
+## What it does
+
+No time right now? No worries. Save a YouTube video's summary straight to your second brain in Obsidian, for later.
+
+Saves a YouTube video to your Obsidian vault in one click: the video is embedded, its transcript is fetched, and Claude writes a structured summary with suggested tags and `[[wikilinks]]` to your existing notes – so it drops straight into your "second brain" for later.
 
 ## Features
 
@@ -107,7 +114,7 @@ Run it in the foreground for debugging: `cd helper && node src/index.js`
 
 Run the tests: `cd helper && node --test`
 
-**If the helper isn't running**, the extension degrades gracefully: the popup shows "Helper not running" and disables Save; a save attempted while it's down is marked **Failed** with a **Retry** link, so you can start the helper and retry with one click.
+**If the helper isn't running**, the extension degrades gracefully: the popup shows the exact **start command** (with a Copy button) and disables Save; any save attempted while it's down is marked **Failed** with a **Retry** link.
 
 ## How it works
 
@@ -122,3 +129,13 @@ YouTube tab ─▶ extension (service worker queue)
 ```
 
 **Security:** loopback-only bind, shared-token auth, CORS restricted to the extension origin, `Host`-header check (DNS-rebinding), request-body cap, server-side URL validation + `--` end-of-options guard on `yt-dlp` (no argument injection), and vault-relative save-folder validation (no path traversal). Duplicate notes are skipped, never overwritten.
+
+## Uninstall (remove everything)
+
+From the repo root:
+
+```bash
+./uninstall.sh
+```
+
+Stops the helper, removes its launchd agent, and deletes config.json (your token) and the log. Then it prints the two manual steps: remove later-brain in chrome://extensions, and rm -rf this folder. Your Obsidian notes are untouched.
