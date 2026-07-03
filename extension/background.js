@@ -1,95 +1,174 @@
-// Background service worker: owns the long-running "save" so it survives the
-// popup being closed. Persists job state to chrome.storage.session (so the
-// popup reflects it whenever reopened) and fires a system notification on
-// completion.
+// Background service worker: owns a sequential queue of "save" jobs so work
+// survives the popup closing, shows a toolbar badge for glanceable status,
+// persists the queue to chrome.storage.session (the popup renders from it), and
+// fires a system notification per completion.
 
 const DEFAULTS = { helperUrl: 'http://127.0.0.1:41484', token: '' };
-const NOTIF_ID = 'later-brain-result';
+const NOTIF_PREFIX = 'later-brain-';
+const MAX_HISTORY = 20;
+
+let jobs = [];        // in-memory mirror of storage.session `jobs`
+let processing = false;
+
+async function loadJobs() {
+  const { jobs: stored } = await chrome.storage.session.get('jobs');
+  jobs = Array.isArray(stored) ? stored : [];
+}
+
+async function saveJobs() {
+  await chrome.storage.session.set({ jobs });
+  updateBadge();
+}
 
 async function getSettings() {
   const s = await chrome.storage.local.get(DEFAULTS);
   return { ...DEFAULTS, ...s };
 }
 
-async function setJob(job) {
-  await chrome.storage.session.set({ job });
+function activeCount() {
+  return jobs.filter((j) => j.state === 'queued' || j.state === 'working').length;
 }
 
-async function getJob() {
-  const { job } = await chrome.storage.session.get('job');
-  return job || { state: 'idle' };
+function updateBadge() {
+  const active = activeCount();
+  if (active > 0) {
+    chrome.action.setBadgeText({ text: String(active) });
+    chrome.action.setBadgeBackgroundColor({ color: '#6C4CF1' });
+  } else if (jobs.some((j) => j.state === 'error' && !j.acked)) {
+    chrome.action.setBadgeText({ text: '!' });
+    chrome.action.setBadgeBackgroundColor({ color: '#C0392B' });
+  } else if (jobs.some((j) => j.state === 'done' && !j.acked)) {
+    chrome.action.setBadgeText({ text: '✓' });
+    chrome.action.setBadgeBackgroundColor({ color: '#2E9E5B' });
+  } else {
+    chrome.action.setBadgeText({ text: '' });
+  }
 }
 
-function noteName(notePath) {
-  if (!notePath) return '';
-  return notePath.split('/').pop().replace(/\.md$/, '');
+function cleanTitle(t) {
+  return String(t || '').replace(/\s*[-–—]\s*YouTube\s*$/i, '').trim();
 }
 
-function notify(opts) {
-  chrome.notifications.create(NOTIF_ID, {
-    type: 'basic',
-    iconUrl: chrome.runtime.getURL('icons/icon128.png'),
-    ...opts,
-  });
+function notify(job) {
+  const id = NOTIF_PREFIX + job.id;
+  if (job.state === 'done') {
+    chrome.notifications.create(id, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+      title: job.skipped ? 'Already saved' : 'Saved to Obsidian ✓',
+      message: job.title || 'Your note is ready.',
+      buttons: [{ title: 'Open in Obsidian' }],
+    });
+  } else if (job.state === 'error') {
+    chrome.notifications.create(id, {
+      type: 'basic',
+      iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+      title: 'later-brain — save failed',
+      message: `${job.title || job.url}: ${job.error}`,
+    });
+  }
 }
 
-async function runSave(url) {
+async function runJob(job) {
   const { helperUrl, token } = await getSettings();
-  await setJob({ state: 'working', url, ts: Date.now() });
   try {
     const r = await fetch(`${helperUrl}/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-later-brain-token': token },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url: job.url }),
     });
     const data = await r.json();
     if (data.ok) {
-      const skipped = Boolean(data.skipped);
-      await setJob({
-        state: 'done', url, skipped,
-        obsidianUri: data.obsidianUri, notePath: data.notePath, ts: Date.now(),
-      });
-      notify({
-        title: skipped ? 'Already saved' : 'Saved to Obsidian ✓',
-        message: noteName(data.notePath) || 'Your note is ready.',
-        buttons: [{ title: 'Open in Obsidian' }],
-      });
+      job.state = 'done';
+      job.skipped = Boolean(data.skipped);
+      job.obsidianUri = data.obsidianUri;
+      job.notePath = data.notePath;
     } else {
-      const msg = data.error === 'no_transcript'
-        ? 'No transcript found for this video.'
-        : `Save failed (${data.error || 'error'}).`;
-      await setJob({ state: 'error', url, error: msg, ts: Date.now() });
-      notify({ title: 'later-brain', message: msg });
+      job.state = 'error';
+      job.error = data.error === 'no_transcript' ? 'No transcript found' : (data.error || 'save failed');
     }
   } catch (e) {
-    const msg = `Could not reach the helper (${e.message}). Is it running?`;
-    await setJob({ state: 'error', url, error: msg, ts: Date.now() });
-    notify({ title: 'later-brain', message: msg });
+    job.state = 'error';
+    job.error = `Helper unreachable (${e.message})`;
+  }
+  job.finishedAt = Date.now();
+  job.acked = false;
+}
+
+async function processQueue() {
+  if (processing) return;
+  processing = true;
+  try {
+    for (;;) {
+      const job = jobs.find((j) => j.state === 'queued' || j.state === 'working');
+      if (!job) break;
+      job.state = 'working';
+      job.startedAt = job.startedAt || Date.now();
+      await saveJobs();
+      await runJob(job);
+      await saveJobs();
+      notify(job);
+    }
+  } finally {
+    processing = false;
   }
 }
 
+async function enqueue(url, title) {
+  // Don't double-queue a video that's already queued or in progress.
+  if (jobs.some((j) => j.url === url && (j.state === 'queued' || j.state === 'working'))) return;
+  jobs.unshift({
+    id: crypto.randomUUID(),
+    url,
+    title: cleanTitle(title),
+    state: 'queued',
+    createdAt: Date.now(),
+    acked: false,
+  });
+  // Trim oldest FINISHED jobs beyond the history cap; never drop active ones.
+  const active = jobs.filter((j) => j.state === 'queued' || j.state === 'working');
+  const finished = jobs.filter((j) => j.state === 'done' || j.state === 'error').slice(0, MAX_HISTORY);
+  jobs = [...active, ...finished].sort((a, b) => b.createdAt - a.createdAt);
+  await saveJobs();
+  processQueue();
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg && msg.type === 'start-save') {
-    getJob().then((job) => {
-      if (job.state === 'working') {
-        sendResponse({ ok: false, busy: true });
-        return;
-      }
-      // Fire-and-forget: the pending fetch inside runSave keeps this worker
-      // alive until the save finishes, even after the popup closes.
-      runSave(msg.url);
-      sendResponse({ ok: true });
+  if (!msg) return false;
+  if (msg.type === 'start-save') {
+    enqueue(msg.url, msg.title).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'ack') {
+    // Mark finished jobs as seen so the badge clears its ✓ / ! indicator.
+    let changed = false;
+    jobs.forEach((j) => {
+      if ((j.state === 'done' || j.state === 'error') && !j.acked) { j.acked = true; changed = true; }
     });
-    return true; // keep the message channel open for the async sendResponse
+    (changed ? saveJobs() : Promise.resolve()).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'clear-finished') {
+    jobs = jobs.filter((j) => j.state === 'queued' || j.state === 'working');
+    saveJobs().then(() => sendResponse({ ok: true }));
+    return true;
   }
   return false;
 });
 
-// Clicking the notification (or its "Open in Obsidian" button) opens the note.
-async function openLastNote() {
-  const job = await getJob();
-  if (job.obsidianUri) chrome.tabs.create({ url: job.obsidianUri });
-  chrome.notifications.clear(NOTIF_ID);
+async function openNoteFromNotif(notifId) {
+  const id = notifId.replace(NOTIF_PREFIX, '');
+  const job = jobs.find((j) => j.id === id);
+  if (job && job.obsidianUri) chrome.tabs.create({ url: job.obsidianUri });
+  chrome.notifications.clear(notifId);
 }
-chrome.notifications.onClicked.addListener(openLastNote);
-chrome.notifications.onButtonClicked.addListener(openLastNote);
+chrome.notifications.onClicked.addListener(openNoteFromNotif);
+chrome.notifications.onButtonClicked.addListener((id) => openNoteFromNotif(id));
+
+// On service-worker start, restore the queue and resume anything unfinished.
+// Re-running a 'working' job is safe because the helper skips duplicate notes.
+(async () => {
+  await loadJobs();
+  updateBadge();
+  if (jobs.some((j) => j.state === 'queued' || j.state === 'working')) processQueue();
+})();

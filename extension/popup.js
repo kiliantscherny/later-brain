@@ -2,96 +2,140 @@ import { isYouTubeWatchUrl } from './lib/url.js';
 
 const DEFAULTS = { helperUrl: 'http://127.0.0.1:41484', token: '' };
 const saveBtn = document.getElementById('save');
-const statusEl = document.getElementById('status');
-const WORKING_MSG = "Working… you can close this — I'll notify you when it's done.";
+const hintEl = document.getElementById('hint');
+const jobsEl = document.getElementById('jobs');
+const emptyEl = document.getElementById('empty');
+const footerEl = document.getElementById('footer');
 
-let currentUrl = '';
-
-function showStatus(text, link) {
-  statusEl.textContent = text;
-  if (link && typeof link.href === 'string' && /^obsidian:/i.test(link.href)) {
-    statusEl.appendChild(document.createTextNode(' '));
-    const a = document.createElement('a');
-    a.textContent = link.label;
-    a.href = link.href;
-    statusEl.appendChild(a);
-  }
-}
+let currentJobs = [];
 
 async function getSettings() {
   const s = await chrome.storage.local.get(DEFAULTS);
   return { ...DEFAULTS, ...s };
 }
 
-async function activeTabUrl() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab?.url ?? '';
+function fmtElapsed(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-async function getJob() {
-  const { job } = await chrome.storage.session.get('job');
-  return job || { state: 'idle' };
+const STATE_LABEL = {
+  queued: 'Queued',
+  working: 'Working…',
+  done: 'Saved ✓',
+  error: 'Failed',
+};
+
+function stateChip(job) {
+  const span = document.createElement('span');
+  span.className = `state st-${job.state}`;
+  span.textContent = job.state === 'done' && job.skipped ? 'Already saved' : (STATE_LABEL[job.state] || job.state);
+  return span;
 }
 
-// Render a job into the popup. `forCurrentTab` gates whether a finished result
-// for a *different* video should take over this tab's status line.
-function renderJob(job, forCurrentTab) {
+function jobRow(job, now) {
+  const li = document.createElement('li');
+  li.className = 'job';
+
+  const main = document.createElement('div');
+  main.style.flex = '1';
+  main.style.minWidth = '0';
+  main.style.overflow = 'hidden';
+
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = job.title || job.url;
+  main.appendChild(title);
+
+  const sub = document.createElement('div');
+  sub.className = 'sub';
   if (job.state === 'working') {
-    statusEl.textContent = WORKING_MSG;
-    saveBtn.disabled = true;
-    return true;
+    sub.textContent = `Processing… ${fmtElapsed(now - (job.startedAt || now))}`;
+  } else if (job.state === 'queued') {
+    sub.textContent = 'Waiting in queue';
+  } else if (job.state === 'done') {
+    const a = document.createElement('a');
+    a.textContent = 'Open in Obsidian';
+    if (typeof job.obsidianUri === 'string' && /^obsidian:/i.test(job.obsidianUri)) a.href = job.obsidianUri;
+    sub.appendChild(a);
+  } else if (job.state === 'error') {
+    sub.textContent = job.error || 'Save failed';
   }
-  if (job.state === 'done' && (forCurrentTab || job.url === currentUrl)) {
-    if (job.skipped) showStatus('Already saved.', { label: 'Open', href: job.obsidianUri });
-    else showStatus('Saved ✓', { label: 'Open in Obsidian', href: job.obsidianUri });
-    saveBtn.disabled = false;
-    return true;
+  main.appendChild(sub);
+
+  li.appendChild(main);
+  li.appendChild(stateChip(job));
+  return li;
+}
+
+function render(jobs) {
+  const now = Date.now();
+  jobsEl.textContent = '';
+  footerEl.textContent = '';
+  if (!jobs.length) {
+    emptyEl.hidden = false;
+    return;
   }
-  if (job.state === 'error' && (forCurrentTab || job.url === currentUrl)) {
-    statusEl.textContent = job.error || 'Save failed.';
-    saveBtn.disabled = false;
-    return true;
+  emptyEl.hidden = true;
+  for (const job of jobs) jobsEl.appendChild(jobRow(job, now));
+
+  if (jobs.some((j) => j.state === 'done' || j.state === 'error')) {
+    const clear = document.createElement('a');
+    clear.href = '#';
+    clear.textContent = 'Clear finished';
+    clear.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.runtime.sendMessage({ type: 'clear-finished' });
+    });
+    footerEl.appendChild(clear);
   }
-  return false;
+}
+
+async function loadAndRender() {
+  const { jobs } = await chrome.storage.session.get('jobs');
+  currentJobs = Array.isArray(jobs) ? jobs : [];
+  render(currentJobs);
 }
 
 async function init() {
-  const { helperUrl, token } = await getSettings();
-  currentUrl = await activeTabUrl();
-  const job = await getJob();
+  await loadAndRender();
+  chrome.runtime.sendMessage({ type: 'ack' }); // seen → clear the badge's ✓ / ! indicator
 
-  // Live-update the popup if the worker changes job state while it's open.
   chrome.storage.session.onChanged.addListener((changes) => {
-    if (changes.job) renderJob(changes.job.newValue || { state: 'idle' }, false);
+    if (changes.jobs) {
+      currentJobs = changes.jobs.newValue || [];
+      render(currentJobs);
+    }
   });
+  // Tick so the "Processing… m:ss" timers advance while the popup is open.
+  setInterval(() => render(currentJobs), 1000);
 
-  // A save in progress is a global state — surface it no matter the tab.
-  if (job.state === 'working') { renderJob(job, true); return; }
+  const { helperUrl, token } = await getSettings();
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const url = tab?.url ?? '';
+  const title = tab?.title ?? '';
 
-  if (!isYouTubeWatchUrl(currentUrl)) {
-    statusEl.textContent = 'Open a YouTube video to save it.';
+  if (!isYouTubeWatchUrl(url)) {
+    hintEl.textContent = 'Open a YouTube video to save it.';
     return;
   }
   if (!token) {
-    statusEl.textContent = 'No token set. Open Options and paste your helper token.';
+    hintEl.textContent = 'No token set — open Options and paste your helper token.';
     return;
   }
 
   try {
     const h = await fetch(`${helperUrl}/health`);
     if (!h.ok) throw new Error();
-    // Show the last result if it was for this exact video; otherwise Ready.
-    if (!renderJob(job, false)) statusEl.textContent = 'Ready.';
+    hintEl.textContent = '';
     saveBtn.disabled = false;
   } catch {
-    statusEl.textContent = 'Helper not reachable. Is it running?';
+    hintEl.textContent = 'Helper not reachable. Is it running?';
   }
 
   saveBtn.addEventListener('click', async () => {
-    saveBtn.disabled = true;
-    statusEl.textContent = WORKING_MSG;
-    const resp = await chrome.runtime.sendMessage({ type: 'start-save', url: currentUrl });
-    if (resp && resp.busy) statusEl.textContent = 'A save is already in progress…';
+    hintEl.textContent = 'Queued ✓ — you can close this and watch the badge.';
+    await chrome.runtime.sendMessage({ type: 'start-save', url, title });
   });
 }
 
