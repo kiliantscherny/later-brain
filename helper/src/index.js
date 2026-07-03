@@ -36,6 +36,13 @@ function resolveSubdir(requested) {
   return requested;
 }
 
+function log(msg) {
+  console.log(`${new Date().toISOString()} ${msg}`);
+}
+function since(t) {
+  return `${((Date.now() - t) / 1000).toFixed(1)}s`;
+}
+
 async function pipeline(url, opts = {}) {
   if (!isYouTubeUrl(url)) {
     const e = new Error('Not a valid YouTube video URL');
@@ -44,17 +51,33 @@ async function pipeline(url, opts = {}) {
   }
   const saveSubdir = resolveSubdir(opts.saveSubdir);
   const includeTags = opts.includeTags !== false; // default on
+  const started = Date.now();
+  log(`▶ save: ${url}`);
+
+  let t = Date.now();
+  log('  fetching transcript (yt-dlp)…');
   const { metadata, transcriptText } = await fetchVideo(url, { ytDlpJson, ytDlpSubs });
+  log(`  transcript: "${metadata.title}" — ${transcriptText.length} chars [${since(t)}]`);
+
   const exclude = ['.obsidian', 'Excalidraw', saveSubdir];
   const noteTitles = listNoteTitles(config.vaultPath, exclude);
+
+  t = Date.now();
+  log(`  summarizing with claude (${noteTitles.length} vault notes for linking)…`);
   const summary = await summarize({ metadata, transcriptText, noteTitles }, { runClaude });
+  log(`  summary: ${summary.keyPoints.length} points, ${summary.wikilinks.length} links [${since(t)}]`);
+
   const content = buildNote({ metadata, summary, transcriptText, savedDate: toISODate(new Date()), includeTags });
-  return writeNote({
+  const result = await writeNote({
     vaultPath: config.vaultPath,
     saveSubdir,
     filename: `${sanitizeFilename(metadata.title)}.md`,
     content,
   });
+  log(result.skipped
+    ? `  ⤳ already exists, skipped: ${result.notePath} [${since(started)} total]`
+    : `  ✓ wrote: ${result.notePath} [${since(started)} total]`);
+  return result;
 }
 
 createServer(config, pipeline).listen(config.port, '127.0.0.1', () => {

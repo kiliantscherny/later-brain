@@ -98,8 +98,8 @@ The summarization prompt lives in `helper/src/prompt.js` in a clearly-marked **U
 ## Managing the helper
 
 ```bash
-# logs
-tail -f helper/helper.log
+# watch live progress (per-stage: fetching → summarizing → wrote, with timings)
+cd helper && npm run logs      # or: tail -f helper/helper.log
 
 # restart (after editing config or the prompt)
 launchctl kickstart -k gui/$(id -u)/com.later-brain.helper

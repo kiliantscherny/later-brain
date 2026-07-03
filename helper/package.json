@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "logs": "tail -n 40 -f helper.log"
   }
 }
