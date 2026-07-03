@@ -5,6 +5,8 @@
 
 ## What it does
 
+https://github.com/user-attachments/assets/a5e69d20-1436-4194-ab0a-1d7bbec20ff2
+
 No time right now? No worries. Save a YouTube video's summary straight to your second brain in Obsidian, for later.
 
 Saves a YouTube video to your Obsidian vault in one click: the video is embedded, its transcript is fetched, and Claude writes a structured summary with suggested tags and `[[wikilinks]]` to your existing notes – so it drops straight into your "second brain" for later.
