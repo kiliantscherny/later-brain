@@ -101,7 +101,11 @@ async function runJob(job) {
       job.state = 'cancelled';
     } else {
       job.state = 'error';
-      job.error = `Helper unreachable (${e.message})`;
+      // A thrown fetch (TypeError) on localhost almost always means the helper
+      // isn't running; other throws are unexpected failures.
+      job.error = e.name === 'TypeError'
+        ? 'Helper not running — start it and retry'
+        : `Save failed (${e.message})`;
     }
   } finally {
     controllers.delete(job.id);
@@ -171,6 +175,23 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === 'cancel-all') {
     for (const j of [...jobs]) cancelJob(j);
     saveJobs().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'retry') {
+    const job = jobs.find((j) => j.id === msg.id);
+    if (job && (job.state === 'error' || job.state === 'cancelled')) {
+      job.state = 'queued';
+      job.error = undefined;
+      job.startedAt = undefined;
+      job.finishedAt = undefined;
+      job.acked = false;
+      job.createdAt = Date.now();
+      jobs.sort((a, b) => b.createdAt - a.createdAt);
+      saveJobs().then(() => sendResponse({ ok: true }));
+      processQueue();
+      return true;
+    }
+    sendResponse({ ok: false });
     return true;
   }
   if (msg.type === 'clear-finished') {

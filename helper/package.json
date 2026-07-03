@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test",
-    "logs": "tail -n 40 -f helper.log"
+    "logs": "tail -n 40 -f helper.log",
+    "status": "bash status.sh"
   }
 }

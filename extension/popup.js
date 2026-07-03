@@ -27,17 +27,25 @@ const STATE_LABEL = {
   cancelled: 'Cancelled',
 };
 
-function appendCancel(sub, jobId) {
+function appendAction(sub, label, className, message) {
   sub.appendChild(document.createTextNode(' · '));
-  const c = document.createElement('a');
-  c.href = '#';
-  c.textContent = 'Cancel';
-  c.className = 'cancel';
-  c.addEventListener('click', (e) => {
+  const a = document.createElement('a');
+  a.href = '#';
+  a.textContent = label;
+  a.className = className;
+  a.addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.runtime.sendMessage({ type: 'cancel', id: jobId });
+    chrome.runtime.sendMessage(message);
   });
-  sub.appendChild(c);
+  sub.appendChild(a);
+}
+
+function appendCancel(sub, jobId) {
+  appendAction(sub, 'Cancel', 'cancel', { type: 'cancel', id: jobId });
+}
+
+function appendRetry(sub, jobId) {
+  appendAction(sub, 'Retry', 'retry', { type: 'retry', id: jobId });
 }
 
 function stateChip(job) {
@@ -76,8 +84,10 @@ function jobRow(job, now) {
     sub.appendChild(a);
   } else if (job.state === 'cancelled') {
     sub.textContent = 'Cancelled';
+    appendRetry(sub, job.id);
   } else if (job.state === 'error') {
     sub.textContent = job.error || 'Save failed';
+    appendRetry(sub, job.id);
   }
   main.appendChild(sub);
 
@@ -161,7 +171,7 @@ async function init() {
     hintEl.textContent = '';
     saveBtn.disabled = false;
   } catch {
-    hintEl.textContent = 'Helper not reachable. Is it running?';
+    hintEl.textContent = 'Helper not running — start it, then reopen. (Saving disabled.)';
   }
 
   saveBtn.addEventListener('click', async () => {

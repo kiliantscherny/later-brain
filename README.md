@@ -89,6 +89,9 @@ The summarization prompt lives in `helper/src/prompt.js` in a clearly-marked **U
 ## Managing the helper
 
 ```bash
+# is it running? CPU / memory / active work + health
+cd helper && npm run status
+
 # watch live progress (per-stage: fetching → summarizing → wrote, with timings)
 cd helper && npm run logs      # or: tail -f helper/helper.log
 
@@ -103,6 +106,8 @@ rm ~/Library/LaunchAgents/com.later-brain.helper.plist
 Run it in the foreground for debugging: `cd helper && node src/index.js`
 
 Run the tests: `cd helper && node --test`
+
+**If the helper isn't running**, the extension degrades gracefully: the popup shows "Helper not running" and disables Save; a save attempted while it's down is marked **Failed** with a **Retry** link, so you can start the helper and retry with one click.
 
 ## How it works
 
