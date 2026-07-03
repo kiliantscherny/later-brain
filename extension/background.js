@@ -114,9 +114,23 @@ async function runJob(job) {
   job.acked = false;
 }
 
+// Keep the MV3 service worker alive while a save is in flight. Chrome kills an
+// idle worker after ~30s; a long `claude` call would otherwise be torn down
+// mid-request (the helper sees the closed socket as a cancel). Pinging an
+// extension API every 20s resets the idle timer.
+let keepAliveTimer = null;
+function startKeepAlive() {
+  if (keepAliveTimer) return;
+  keepAliveTimer = setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
+}
+function stopKeepAlive() {
+  if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
+}
+
 async function processQueue() {
   if (processing) return;
   processing = true;
+  startKeepAlive();
   try {
     for (;;) {
       const job = jobs.find((j) => j.state === 'queued' || j.state === 'working');
@@ -130,6 +144,7 @@ async function processQueue() {
     }
   } finally {
     processing = false;
+    stopKeepAlive();
   }
 }
 
