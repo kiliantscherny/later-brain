@@ -95,3 +95,25 @@ test('buildNote keeps a newline in the title from breaking YAML frontmatter', ()
   });
   assert.match(md, /title: "Line1 Line2"/);
 });
+
+test('buildNote embeds the video below the title, above the summary', () => {
+  const md = buildNote({
+    metadata: { title: 'Vid', channel: '', url: 'https://www.youtube.com/watch?v=abc', uploadDate: '' },
+    summary: { tldr: 'gist', keyPoints: [], quotes: [], tags: [], wikilinks: [] },
+    transcriptText: 'b',
+    savedDate: '2026-06-30',
+  });
+  assert.match(md, /# Vid\n\n!\[\]\(https:\/\/www\.youtube\.com\/watch\?v=abc\)\n\n> \[!summary\] TL;DR/);
+});
+
+test('buildNote omits the tags line when includeTags is false', () => {
+  const md = buildNote({
+    metadata: { title: 'T', channel: '', url: 'https://u', uploadDate: '' },
+    summary: { tldr: 't', keyPoints: [], quotes: [], tags: ['ai'], wikilinks: [] },
+    transcriptText: 'b',
+    savedDate: '2026-06-30',
+    includeTags: false,
+  });
+  assert.doesNotMatch(md, /^tags:/m);
+  assert.match(md, /type: youtube/);
+});

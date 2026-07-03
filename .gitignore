@@ -5,3 +5,7 @@ helper/config.json
 
 # Raw AI-generated icon source (large; processed into icons/icon*.png)
 extension/icons/ChatGPT Image*.png
+
+# Local build/process notes — not part of the shipped project
+docs/superpowers/
+.superpowers/

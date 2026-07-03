@@ -3,7 +3,12 @@
 // persists the queue to chrome.storage.session (the popup renders from it), and
 // fires a system notification per completion.
 
-const DEFAULTS = { helperUrl: 'http://127.0.0.1:41484', token: '' };
+const DEFAULTS = {
+  helperUrl: 'http://127.0.0.1:41484',
+  token: '',
+  saveSubdir: 'Clippings/YouTube',
+  includeTags: true,
+};
 const NOTIF_PREFIX = 'later-brain-';
 const MAX_HISTORY = 20;
 
@@ -70,12 +75,12 @@ function notify(job) {
 }
 
 async function runJob(job) {
-  const { helperUrl, token } = await getSettings();
+  const { helperUrl, token, saveSubdir, includeTags } = await getSettings();
   try {
     const r = await fetch(`${helperUrl}/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-later-brain-token': token },
-      body: JSON.stringify({ url: job.url }),
+      body: JSON.stringify({ url: job.url, saveSubdir, includeTags }),
     });
     const data = await r.json();
     if (data.ok) {

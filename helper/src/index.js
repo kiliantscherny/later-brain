@@ -10,12 +10,12 @@ import { buildNote, sanitizeFilename, toISODate } from './note.js';
 import { writeNote } from './writer.js';
 import { createServer } from './server.js';
 import { isYouTubeUrl } from './urlcheck.js';
+import { isSafeSubdir } from './subdir.js';
 
 const run = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const config = loadConfig(join(here, '..', 'config.json'));
 const { ytDlpJson, ytDlpSubs } = makeYtDlp(config.ytDlpPath);
-const EXCLUDE = ['.obsidian', 'Excalidraw', config.saveSubdir];
 
 async function runClaude(prompt) {
   const args = ['-p', prompt];
@@ -24,19 +24,34 @@ async function runClaude(prompt) {
   return stdout;
 }
 
-async function pipeline(url) {
+// The save folder may come from the extension (per-request). Fall back to the
+// configured default; reject anything that could escape the vault.
+function resolveSubdir(requested) {
+  if (requested === undefined || requested === null || requested === '') return config.saveSubdir;
+  if (!isSafeSubdir(requested)) {
+    const e = new Error('Invalid save folder');
+    e.code = 'bad_subdir';
+    throw e;
+  }
+  return requested;
+}
+
+async function pipeline(url, opts = {}) {
   if (!isYouTubeUrl(url)) {
     const e = new Error('Not a valid YouTube video URL');
     e.code = 'bad_url';
     throw e;
   }
+  const saveSubdir = resolveSubdir(opts.saveSubdir);
+  const includeTags = opts.includeTags !== false; // default on
   const { metadata, transcriptText } = await fetchVideo(url, { ytDlpJson, ytDlpSubs });
-  const noteTitles = listNoteTitles(config.vaultPath, EXCLUDE);
+  const exclude = ['.obsidian', 'Excalidraw', saveSubdir];
+  const noteTitles = listNoteTitles(config.vaultPath, exclude);
   const summary = await summarize({ metadata, transcriptText, noteTitles }, { runClaude });
-  const content = buildNote({ metadata, summary, transcriptText, savedDate: toISODate(new Date()) });
+  const content = buildNote({ metadata, summary, transcriptText, savedDate: toISODate(new Date()), includeTags });
   return writeNote({
     vaultPath: config.vaultPath,
-    saveSubdir: config.saveSubdir,
+    saveSubdir,
     filename: `${sanitizeFilename(metadata.title)}.md`,
     content,
   });

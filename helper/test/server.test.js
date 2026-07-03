@@ -137,3 +137,31 @@ test('rejects oversized body with a real 413 (Content-Length pre-check)', async 
   assert.equal(JSON.parse(r.body).error, 'body_too_large');
   server.close();
 });
+
+test('POST /save maps bad_subdir to 400', async () => {
+  const server = createServer(CONFIG, async () => { const e = new Error('bad'); e.code = 'bad_subdir'; throw e; });
+  const port = await start(server);
+  const r = await fetch(`http://127.0.0.1:${port}/save`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-later-brain-token': 'secret' },
+    body: JSON.stringify({ url: 'u', saveSubdir: '../evil' }),
+  });
+  assert.equal(r.status, 400);
+  assert.equal((await r.json()).error, 'bad_subdir');
+  server.close();
+});
+
+test('POST /save forwards saveSubdir and includeTags to the pipeline', async () => {
+  let received = null;
+  const server = createServer(CONFIG, async (url, opts) => { received = { url, opts }; return {}; });
+  const port = await start(server);
+  await fetch(`http://127.0.0.1:${port}/save`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-later-brain-token': 'secret' },
+    body: JSON.stringify({ url: 'https://youtu.be/x', saveSubdir: 'Inbox', includeTags: false }),
+  });
+  assert.equal(received.url, 'https://youtu.be/x');
+  assert.equal(received.opts.saveSubdir, 'Inbox');
+  assert.equal(received.opts.includeTags, false);
+  server.close();
+});

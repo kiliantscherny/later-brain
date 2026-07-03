@@ -1,16 +1,39 @@
 <!doctype html>
 <html>
-  <head><meta charset="utf-8" /><title>later-brain options</title>
-    <style>body{font:14px system-ui;padding:20px;max-width:420px}label{display:block;margin:12px 0 4px}input{width:100%;padding:6px}button{margin-top:14px;padding:8px 14px}</style>
+  <head>
+    <meta charset="utf-8" />
+    <title>later-brain options</title>
+    <style>
+      body { font: 14px -apple-system, system-ui, sans-serif; padding: 20px; max-width: 440px; color: #1c1c1e; }
+      h3 { margin-top: 0; }
+      label.field { display: block; margin: 16px 0 4px; font-weight: 600; }
+      input[type="text"] { width: 100%; padding: 6px; box-sizing: border-box; }
+      .row { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+      .hint { color: #8a8a90; font-size: 12px; margin-top: 4px; }
+      button { margin-top: 18px; padding: 8px 14px; border: 0; border-radius: 6px; background: #6C4CF1; color: #fff; cursor: pointer; }
+      #saved { margin-top: 10px; color: #2E9E5B; }
+    </style>
   </head>
   <body>
     <h3>later-brain settings</h3>
-    <label>Helper URL</label>
-    <input id="helperUrl" value="http://127.0.0.1:41484" />
-    <label>Token (from install.sh output)</label>
-    <input id="token" placeholder="paste token here" />
+
+    <label class="field" for="helperUrl">Helper URL</label>
+    <input type="text" id="helperUrl" value="http://127.0.0.1:41484" />
+
+    <label class="field" for="token">Token (from install.sh output)</label>
+    <input type="text" id="token" placeholder="paste token here" />
+
+    <label class="field" for="saveSubdir">Save folder (inside your Obsidian vault)</label>
+    <input type="text" id="saveSubdir" placeholder="Clippings/YouTube" />
+    <div class="hint">Relative to your vault root; created if it doesn't exist. The vault itself is chosen when you run install.sh.</div>
+
+    <div class="row">
+      <input type="checkbox" id="includeTags" />
+      <label for="includeTags">Add Claude's suggested tags to the note</label>
+    </div>
+
     <button id="save">Save</button>
-    <div id="saved" style="margin-top:10px;color:green"></div>
+    <div id="saved"></div>
     <script src="options.js"></script>
   </body>
 </html>

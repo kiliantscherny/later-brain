@@ -69,22 +69,24 @@ export function createServer(config, pipeline) {
         res.setHeader('Connection', 'close');
         return send(req, res, 413, { ok: false, error: 'body_too_large' });
       }
-      let url;
+      let body = null;
       try {
-        url = JSON.parse(await readBody(req)).url;
+        body = JSON.parse(await readBody(req));
       } catch (e) {
         if (e.message === 'body_too_large') {
           res.setHeader('Connection', 'close');
           return send(req, res, 413, { ok: false, error: 'body_too_large' });
         }
-        url = null;
+        body = null;
       }
+      const url = body && body.url;
       if (!url) return send(req, res, 400, { ok: false, error: 'missing_url' });
       try {
-        const result = await pipeline(url);
+        const result = await pipeline(url, { saveSubdir: body.saveSubdir, includeTags: body.includeTags });
         return send(req, res, 200, { ok: true, ...result });
       } catch (e) {
         if (e.code === 'bad_url') return send(req, res, 400, { ok: false, error: 'bad_url' });
+        if (e.code === 'bad_subdir') return send(req, res, 400, { ok: false, error: 'bad_subdir' });
         if (e.code === 'no_transcript') return send(req, res, 422, { ok: false, error: 'no_transcript' });
         console.error('later-brain pipeline error:', e);
         return send(req, res, 500, { ok: false, error: 'internal' });

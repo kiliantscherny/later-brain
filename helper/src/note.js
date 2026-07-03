@@ -38,8 +38,11 @@ export function foldTranscript(text) {
   return `> [!quote]- Full transcript\n${body}`;
 }
 
-export function buildNote({ metadata, summary, transcriptText, savedDate }) {
+export function buildNote({ metadata, summary, transcriptText, savedDate, includeTags = true }) {
   const published = formatDate(metadata.uploadDate);
+  const tagLine = includeTags
+    ? `tags: [${summary.tags.map(sanitizeTag).filter(Boolean).join(', ')}]`
+    : null;
   const fm = [
     '---',
     `title: ${yamlQuote(metadata.title)}`,
@@ -48,19 +51,20 @@ export function buildNote({ metadata, summary, transcriptText, savedDate }) {
     ...(published ? [`published: ${published}`] : []),
     `saved: ${savedDate}`,
     'type: youtube',
-    `tags: [${summary.tags.map(sanitizeTag).filter(Boolean).join(', ')}]`,
+    ...(tagLine ? [tagLine] : []),
     '---',
   ].join('\n');
 
-  const sections = [
-    fm,
-    `# ${metadata.title}`,
-    '',
+  // Embed the video (Obsidian renders `![](youtube-url)` as an inline player)
+  // directly under the title, above the summary.
+  const sections = [fm, `# ${metadata.title}`, ''];
+  if (metadata.url) sections.push(`![](${metadata.url})`, '');
+  sections.push(
     `> [!summary] TL;DR\n> ${summary.tldr}`,
     '',
     '## Key points',
     summary.keyPoints.map((p) => `- ${p}`).join('\n'),
-  ];
+  );
 
   if (summary.quotes.length) {
     sections.push('', '## Notable quotes', summary.quotes.map((q) => `> ${q}`).join('\n\n'));
