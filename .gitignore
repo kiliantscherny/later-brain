@@ -2,3 +2,6 @@ node_modules/
 helper/config.json
 *.log
 .DS_Store
+
+# Raw AI-generated icon source (large; processed into icons/icon*.png)
+extension/icons/ChatGPT Image*.png
