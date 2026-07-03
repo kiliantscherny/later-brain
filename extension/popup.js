@@ -3,6 +3,9 @@ import { isYouTubeWatchUrl } from './lib/url.js';
 const DEFAULTS = { helperUrl: 'http://127.0.0.1:41484', token: '' };
 const saveBtn = document.getElementById('save');
 const statusEl = document.getElementById('status');
+const WORKING_MSG = "Working… you can close this — I'll notify you when it's done.";
+
+let currentUrl = '';
 
 function showStatus(text, link) {
   statusEl.textContent = text;
@@ -25,15 +28,60 @@ async function activeTabUrl() {
   return tab?.url ?? '';
 }
 
+async function getJob() {
+  const { job } = await chrome.storage.session.get('job');
+  return job || { state: 'idle' };
+}
+
+// Render a job into the popup. `forCurrentTab` gates whether a finished result
+// for a *different* video should take over this tab's status line.
+function renderJob(job, forCurrentTab) {
+  if (job.state === 'working') {
+    statusEl.textContent = WORKING_MSG;
+    saveBtn.disabled = true;
+    return true;
+  }
+  if (job.state === 'done' && (forCurrentTab || job.url === currentUrl)) {
+    if (job.skipped) showStatus('Already saved.', { label: 'Open', href: job.obsidianUri });
+    else showStatus('Saved ✓', { label: 'Open in Obsidian', href: job.obsidianUri });
+    saveBtn.disabled = false;
+    return true;
+  }
+  if (job.state === 'error' && (forCurrentTab || job.url === currentUrl)) {
+    statusEl.textContent = job.error || 'Save failed.';
+    saveBtn.disabled = false;
+    return true;
+  }
+  return false;
+}
+
 async function init() {
   const { helperUrl, token } = await getSettings();
-  const url = await activeTabUrl();
-  if (!isYouTubeWatchUrl(url)) { statusEl.textContent = 'Open a YouTube video to save it.'; return; }
-  if (!token) { statusEl.textContent = 'No token set. Open Options and paste your helper token.'; return; }
+  currentUrl = await activeTabUrl();
+  const job = await getJob();
+
+  // Live-update the popup if the worker changes job state while it's open.
+  chrome.storage.session.onChanged.addListener((changes) => {
+    if (changes.job) renderJob(changes.job.newValue || { state: 'idle' }, false);
+  });
+
+  // A save in progress is a global state — surface it no matter the tab.
+  if (job.state === 'working') { renderJob(job, true); return; }
+
+  if (!isYouTubeWatchUrl(currentUrl)) {
+    statusEl.textContent = 'Open a YouTube video to save it.';
+    return;
+  }
+  if (!token) {
+    statusEl.textContent = 'No token set. Open Options and paste your helper token.';
+    return;
+  }
+
   try {
     const h = await fetch(`${helperUrl}/health`);
     if (!h.ok) throw new Error();
-    statusEl.textContent = 'Ready.';
+    // Show the last result if it was for this exact video; otherwise Ready.
+    if (!renderJob(job, false)) statusEl.textContent = 'Ready.';
     saveBtn.disabled = false;
   } catch {
     statusEl.textContent = 'Helper not reachable. Is it running?';
@@ -41,29 +89,9 @@ async function init() {
 
   saveBtn.addEventListener('click', async () => {
     saveBtn.disabled = true;
-    statusEl.textContent = 'Working… fetching transcript + summarizing (~20s)';
-    try {
-      const r = await fetch(`${helperUrl}/save`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-later-brain-token': token },
-        body: JSON.stringify({ url }),
-      });
-      const data = await r.json();
-      if (data.ok && data.skipped) {
-        showStatus('Already saved.', { label: 'Open', href: data.obsidianUri });
-      } else if (data.ok) {
-        showStatus('Saved ✓', { label: 'Open in Obsidian', href: data.obsidianUri });
-      } else if (data.error === 'no_transcript') {
-        statusEl.textContent = 'No transcript found for this video.';
-        saveBtn.disabled = false;
-      } else {
-        statusEl.textContent = `Error: ${data.error || 'request failed'}`;
-        saveBtn.disabled = false;
-      }
-    } catch (e) {
-      statusEl.textContent = `Request failed: ${e.message}`;
-      saveBtn.disabled = false;
-    }
+    statusEl.textContent = WORKING_MSG;
+    const resp = await chrome.runtime.sendMessage({ type: 'start-save', url: currentUrl });
+    if (resp && resp.busy) statusEl.textContent = 'A save is already in progress…';
   });
 }
 
