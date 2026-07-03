@@ -48,6 +48,38 @@ function appendRetry(sub, jobId) {
   appendAction(sub, 'Retry', 'retry', { type: 'retry', id: jobId });
 }
 
+const START_CMD = 'launchctl kickstart -k gui/$(id -u)/com.later-brain.helper';
+
+function showHelperDown() {
+  hintEl.textContent = 'Helper not running. Start it in a terminal:';
+
+  const box = document.createElement('div');
+  box.className = 'cmd';
+  const code = document.createElement('code');
+  code.textContent = START_CMD;
+  const copy = document.createElement('button');
+  copy.className = 'copybtn';
+  copy.textContent = 'Copy';
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(START_CMD);
+      copy.textContent = 'Copied';
+      setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+    } catch {
+      copy.textContent = 'Copy failed';
+    }
+  });
+  box.appendChild(code);
+  box.appendChild(copy);
+  hintEl.appendChild(box);
+
+  const note = document.createElement('div');
+  note.className = 'sub';
+  note.style.marginTop = '6px';
+  note.textContent = 'Not installed yet? Run ./install.sh in the repo. Then reopen this popup.';
+  hintEl.appendChild(note);
+}
+
 function stateChip(job) {
   const span = document.createElement('span');
   span.className = `state st-${job.state}`;
@@ -142,6 +174,11 @@ async function init() {
   await loadAndRender();
   chrome.runtime.sendMessage({ type: 'ack' }); // seen → clear the badge's ✓ / ! indicator
 
+  document.getElementById('optionsLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.runtime.openOptionsPage();
+  });
+
   chrome.storage.session.onChanged.addListener((changes) => {
     if (changes.jobs) {
       currentJobs = changes.jobs.newValue || [];
@@ -171,7 +208,7 @@ async function init() {
     hintEl.textContent = '';
     saveBtn.disabled = false;
   } catch {
-    hintEl.textContent = 'Helper not running — start it, then reopen. (Saving disabled.)';
+    showHelperDown();
   }
 
   saveBtn.addEventListener('click', async () => {

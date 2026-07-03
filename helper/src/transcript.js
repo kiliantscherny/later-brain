@@ -1,16 +1,18 @@
 export function parseJson3(obj) {
   const events = Array.isArray(obj?.events) ? obj.events : [];
-  const lines = [];
+  const parts = [];
   let prev = null;
   for (const ev of events) {
     const segs = Array.isArray(ev.segs) ? ev.segs : [];
-    const line = segs.map((s) => s.utf8 ?? '').join('').replace(/\n/g, ' ').trim();
-    if (!line) continue;
-    if (line === prev) continue;
-    lines.push(line);
-    prev = line;
+    const chunk = segs.map((s) => s.utf8 ?? '').join('').replace(/\s+/g, ' ').trim();
+    if (!chunk) continue;
+    if (chunk === prev) continue;
+    parts.push(chunk);
+    prev = chunk;
   }
-  return lines.join('\n');
+  // One flowing block (sentences after each other) rather than one line per
+  // caption — nicer to read and to copy elsewhere.
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 export function extractMetadata(j) {

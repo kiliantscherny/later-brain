@@ -11,7 +11,7 @@ test('parseJson3 joins segs and drops empty + duplicate lines', () => {
       { segs: [{ utf8: 'Next line' }] },
     ],
   };
-  assert.equal(parseJson3(obj), 'Hello world\nNext line');
+  assert.equal(parseJson3(obj), 'Hello world Next line');
 });
 
 test('parseJson3 returns empty string for no events', () => {

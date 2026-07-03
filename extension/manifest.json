@@ -3,7 +3,7 @@
   "name": "later-brain",
   "version": "0.1.0",
   "description": "Save a YouTube video's transcript, summarize with Claude, and store it in your Obsidian vault.",
-  "permissions": ["activeTab", "tabs", "storage", "notifications"],
+  "permissions": ["activeTab", "tabs", "storage", "notifications", "clipboardWrite"],
   "host_permissions": ["http://127.0.0.1:41484/*"],
   "background": { "service_worker": "background.js", "type": "module" },
   "action": {
