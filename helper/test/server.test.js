@@ -165,3 +165,25 @@ test('POST /save forwards saveSubdir and includeTags to the pipeline', async () 
   assert.equal(received.opts.includeTags, false);
   server.close();
 });
+
+test('aborts the pipeline signal when the client disconnects (cancel)', async () => {
+  let signalRef = null;
+  const server = createServer(CONFIG, (url, opts, signal) => new Promise((resolve) => {
+    signalRef = signal;
+    signal.addEventListener('abort', () => resolve({}));
+  }));
+  const port = await start(server);
+  const controller = new AbortController();
+  fetch(`http://127.0.0.1:${port}/save`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-later-brain-token': 'secret' },
+    body: JSON.stringify({ url: 'https://youtu.be/x' }),
+    signal: controller.signal,
+  }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 80));
+  controller.abort();
+  await new Promise((r) => setTimeout(r, 120));
+  assert.ok(signalRef, 'pipeline received an abort signal');
+  assert.equal(signalRef.aborted, true);
+  server.close();
+});

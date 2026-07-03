@@ -17,10 +17,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const config = loadConfig(join(here, '..', 'config.json'));
 const { ytDlpJson, ytDlpSubs } = makeYtDlp(config.ytDlpPath);
 
-async function runClaude(prompt) {
+async function runClaude(prompt, signal) {
   const args = ['-p', prompt];
   if (config.model) args.push('--model', config.model);
-  const { stdout } = await run(config.claudePath, args, { maxBuffer: 32 * 1024 * 1024, timeout: 180000 });
+  const { stdout } = await run(config.claudePath, args, { maxBuffer: 32 * 1024 * 1024, timeout: 180000, signal });
   return stdout;
 }
 
@@ -43,7 +43,7 @@ function since(t) {
   return `${((Date.now() - t) / 1000).toFixed(1)}s`;
 }
 
-async function pipeline(url, opts = {}) {
+async function pipeline(url, opts = {}, signal) {
   if (!isYouTubeUrl(url)) {
     const e = new Error('Not a valid YouTube video URL');
     e.code = 'bad_url';
@@ -56,16 +56,18 @@ async function pipeline(url, opts = {}) {
 
   let t = Date.now();
   log('  fetching transcript (yt-dlp)…');
-  const { metadata, transcriptText } = await fetchVideo(url, { ytDlpJson, ytDlpSubs });
+  const { metadata, transcriptText } = await fetchVideo(url, { ytDlpJson, ytDlpSubs }, signal);
   log(`  transcript: "${metadata.title}" — ${transcriptText.length} chars [${since(t)}]`);
+  signal?.throwIfAborted();
 
   const exclude = ['.obsidian', 'Excalidraw', saveSubdir];
   const noteTitles = listNoteTitles(config.vaultPath, exclude);
 
   t = Date.now();
   log(`  summarizing with claude (${noteTitles.length} vault notes for linking)…`);
-  const summary = await summarize({ metadata, transcriptText, noteTitles }, { runClaude });
+  const summary = await summarize({ metadata, transcriptText, noteTitles }, { runClaude: (p) => runClaude(p, signal) });
   log(`  summary: ${summary.keyPoints.length} points, ${summary.wikilinks.length} links [${since(t)}]`);
+  signal?.throwIfAborted();
 
   const content = buildNote({ metadata, summary, transcriptText, savedDate: toISODate(new Date()), includeTags });
   const result = await writeNote({

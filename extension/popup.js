@@ -24,7 +24,21 @@ const STATE_LABEL = {
   working: 'Working…',
   done: 'Saved ✓',
   error: 'Failed',
+  cancelled: 'Cancelled',
 };
+
+function appendCancel(sub, jobId) {
+  sub.appendChild(document.createTextNode(' · '));
+  const c = document.createElement('a');
+  c.href = '#';
+  c.textContent = 'Cancel';
+  c.className = 'cancel';
+  c.addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.runtime.sendMessage({ type: 'cancel', id: jobId });
+  });
+  sub.appendChild(c);
+}
 
 function stateChip(job) {
   const span = document.createElement('span');
@@ -51,13 +65,17 @@ function jobRow(job, now) {
   sub.className = 'sub';
   if (job.state === 'working') {
     sub.textContent = `Processing… ${fmtElapsed(now - (job.startedAt || now))}`;
+    appendCancel(sub, job.id);
   } else if (job.state === 'queued') {
     sub.textContent = 'Waiting in queue';
+    appendCancel(sub, job.id);
   } else if (job.state === 'done') {
     const a = document.createElement('a');
     a.textContent = 'Open in Obsidian';
     if (typeof job.obsidianUri === 'string' && /^obsidian:/i.test(job.obsidianUri)) a.href = job.obsidianUri;
     sub.appendChild(a);
+  } else if (job.state === 'cancelled') {
+    sub.textContent = 'Cancelled';
   } else if (job.state === 'error') {
     sub.textContent = job.error || 'Save failed';
   }
@@ -79,7 +97,20 @@ function render(jobs) {
   emptyEl.hidden = true;
   for (const job of jobs) jobsEl.appendChild(jobRow(job, now));
 
-  if (jobs.some((j) => j.state === 'done' || j.state === 'error')) {
+  const hasActive = jobs.some((j) => j.state === 'queued' || j.state === 'working');
+  const hasFinished = jobs.some((j) => j.state === 'done' || j.state === 'error' || j.state === 'cancelled');
+  if (hasActive) {
+    const cancelAll = document.createElement('a');
+    cancelAll.href = '#';
+    cancelAll.textContent = 'Cancel all';
+    cancelAll.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.runtime.sendMessage({ type: 'cancel-all' });
+    });
+    footerEl.appendChild(cancelAll);
+  }
+  if (hasActive && hasFinished) footerEl.appendChild(document.createTextNode(' · '));
+  if (hasFinished) {
     const clear = document.createElement('a');
     clear.href = '#';
     clear.textContent = 'Clear finished';

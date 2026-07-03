@@ -81,10 +81,14 @@ export function createServer(config, pipeline) {
       }
       const url = body && body.url;
       if (!url) return send(req, res, 400, { ok: false, error: 'missing_url' });
+      // Abort the running yt-dlp/claude work if the client disconnects (cancel).
+      const ac = new AbortController();
+      res.on('close', () => { if (!res.writableFinished) ac.abort(); });
       try {
-        const result = await pipeline(url, { saveSubdir: body.saveSubdir, includeTags: body.includeTags });
+        const result = await pipeline(url, { saveSubdir: body.saveSubdir, includeTags: body.includeTags }, ac.signal);
         return send(req, res, 200, { ok: true, ...result });
       } catch (e) {
+        if (ac.signal.aborted) { console.log('later-brain: save cancelled by client'); return; }
         if (e.code === 'bad_url') return send(req, res, 400, { ok: false, error: 'bad_url' });
         if (e.code === 'bad_subdir') return send(req, res, 400, { ok: false, error: 'bad_subdir' });
         if (e.code === 'no_transcript') return send(req, res, 422, { ok: false, error: 'no_transcript' });

@@ -1,23 +1,21 @@
-# later-brain
+<h1 align="center"><img src="extension/icons/icon128.png" alt="later brain logo" width="128"></h1>
+<h2 align="center">Later Brain</h2>
+<p align="center">Save a YouTube video to your <b>Obsidian</b> vault in one click: the video is embedded, its transcript is fetched, and <b>Claude</b> writes a structured summary with suggested tags and <code>[[wikilinks]]</code> to your existing notes – so it drops straight into your "second brain" for later.</p>
 
-Save a YouTube video to your **Obsidian** vault in one click: the video is embedded, its transcript is fetched, and **Claude** writes a structured summary with suggested tags and `[[wikilinks]]` to your existing notes — so it drops straight into your "second brain."
+## Features
 
-- **Chrome extension** — a toolbar button + a live queue you can watch. Save several videos; each runs in the background with a status badge.
-- **Local helper** — a tiny, zero-dependency Node service on `127.0.0.1` that runs `yt-dlp` → `claude` → writes the note. No API key, no cloud: summarization uses your existing Claude subscription via the `claude` CLI.
+- **Chrome extension**: a toolbar button + a live queue you can watch. Save several videos; each runs in the background with a status badge.
+- **Local helper**: a tiny, zero-dependency Node service on `127.0.0.1` that runs `yt-dlp` → `claude` → writes the note. No API key, no cloud: summarization uses your existing Claude subscription via the `claude` CLI.
 
 Everything runs on your machine. The helper binds to loopback only and is protected by a token.
-
----
 
 ## Prerequisites
 
 - **macOS** (the installer sets up a `launchd` agent; the helper itself is cross-platform)
-- **Node.js 18+** — `node --version`
-- **[Claude Code](https://claude.com/claude-code)** — the `claude` CLI must be on your `PATH`
-- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — the installer offers to `brew install` it if missing
+- **Node.js 18+** – `node --version`
+- **[Claude Code](https://claude.com/claude-code)** – the `claude` CLI must be on your `PATH`
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** – the installer offers to `brew install` it if missing
 - **[Obsidian](https://obsidian.md)** with a vault
-
----
 
 ## Install with an AI agent (easiest)
 
@@ -42,8 +40,6 @@ https://github.com/kiliantscherny/later-brain on my Mac:
 Automate everything you can; for the Chrome steps, walk me through them.
 ```
 
----
-
 ## Manual install
 
 ```bash
@@ -66,34 +62,29 @@ Then load the extension:
 
 Verify: `curl http://127.0.0.1:41484/health` → `{"ok":true,...}`
 
----
-
 ## Usage
 
 Open a YouTube video (with captions) → click the **later-brain** toolbar icon → **Save this video**.
 
-- The save runs in the **background** — switch tabs or close the popup freely.
+- The save runs in the **background** – switch tabs or close the popup freely.
 - The toolbar **badge** shows active saves (`2`), a green **✓** when done, red **!** on failure.
 - Reopen the popup any time to see the **queue**: `Queued → Working… 0:14 → Saved ✓` with an **Open in Obsidian** link per note.
+- **Cancel** a queued or running save from the popup (per-job **Cancel**, or **Cancel all**). Cancelling a running save actually stops the `yt-dlp`/`claude` work on the helper, not just the waiting.
 - A **system notification** fires on completion (enable Chrome notifications in *System Settings → Notifications* to see it).
 
 The note lands in your chosen folder and contains: the **embedded video**, a TL;DR, key points, notable quotes, suggested tags, `[[wikilinks]]` to your real notes, and the full transcript in a collapsible callout.
 
----
-
 ## Configuration (extension Options)
 
-- **Save folder** — where notes go *inside* your vault (default `Clippings/YouTube`). Relative path; created if needed.
-- **Add suggested tags** — toggle Claude's `tags:` frontmatter on/off.
-- **Helper URL / Token** — set during install.
+- **Save folder** – where notes go *inside* your vault (default `Clippings/YouTube`). Relative path; created if needed.
+- **Add suggested tags** – toggle Claude's `tags:` frontmatter on/off.
+- **Helper URL / Token** – set during install.
 
 Your **vault root** is chosen when you run `install.sh`. To point at a different vault later, edit `vaultPath` in `helper/config.json` and restart the helper (below), or re-run `./install.sh` after deleting `helper/config.json`.
 
 ### Tuning the summary
 
-The summarization prompt lives in `helper/src/prompt.js` in a clearly-marked **USER-AUTHORED region** — change the sections, tone, or depth to taste. Restart the helper afterward.
-
----
+The summarization prompt lives in `helper/src/prompt.js` in a clearly-marked **USER-AUTHORED region** – change the sections, tone, or depth to taste. Restart the helper afterward.
 
 ## Managing the helper
 
@@ -113,8 +104,6 @@ Run it in the foreground for debugging: `cd helper && node src/index.js`
 
 Run the tests: `cd helper && node --test`
 
----
-
 ## How it works
 
 ```
@@ -128,9 +117,3 @@ YouTube tab ─▶ extension (service worker queue)
 ```
 
 **Security:** loopback-only bind, shared-token auth, CORS restricted to the extension origin, `Host`-header check (DNS-rebinding), request-body cap, server-side URL validation + `--` end-of-options guard on `yt-dlp` (no argument injection), and vault-relative save-folder validation (no path traversal). Duplicate notes are skipped, never overwritten.
-
----
-
-## License
-
-MIT

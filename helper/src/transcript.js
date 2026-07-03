@@ -24,8 +24,8 @@ export function extractMetadata(j) {
   };
 }
 
-export async function fetchVideo(url, deps) {
-  const [json, subsRaw] = await Promise.all([deps.ytDlpJson(url), deps.ytDlpSubs(url)]);
+export async function fetchVideo(url, deps, signal) {
+  const [json, subsRaw] = await Promise.all([deps.ytDlpJson(url, signal), deps.ytDlpSubs(url, signal)]);
   if (!subsRaw) {
     const e = new Error('No transcript/captions found for this video');
     e.code = 'no_transcript';

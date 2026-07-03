@@ -7,21 +7,21 @@ import { promisify } from 'node:util';
 const run = promisify(execFile);
 
 export function makeYtDlp(ytDlpPath) {
-  async function ytDlpJson(url) {
+  async function ytDlpJson(url, signal) {
     const { stdout } = await run(ytDlpPath, ['-J', '--no-warnings', '--', url], {
-      maxBuffer: 64 * 1024 * 1024, timeout: 120000,
+      maxBuffer: 64 * 1024 * 1024, timeout: 120000, signal,
     });
     return JSON.parse(stdout);
   }
 
-  async function ytDlpSubs(url) {
+  async function ytDlpSubs(url, signal) {
     const dir = await mkdtemp(join(tmpdir(), 'lb-subs-'));
     try {
       await run(ytDlpPath, [
         '--skip-download', '--write-subs', '--write-auto-subs',
         '--sub-langs', 'en.*', '--sub-format', 'json3',
         '-o', join(dir, '%(id)s.%(ext)s'), '--no-warnings', '--', url,
-      ], { maxBuffer: 64 * 1024 * 1024, timeout: 120000 }).catch(() => {});
+      ], { maxBuffer: 64 * 1024 * 1024, timeout: 120000, signal }).catch(() => {});
       const files = (await readdir(dir)).filter((f) => f.endsWith('.json3'));
       if (files.length === 0) return null;
       // Prefer a manual (non-auto) track if present; auto tracks contain ".auto." or lang like "en-orig"

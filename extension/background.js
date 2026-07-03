@@ -14,6 +14,7 @@ const MAX_HISTORY = 20;
 
 let jobs = [];        // in-memory mirror of storage.session `jobs`
 let processing = false;
+const controllers = new Map(); // jobId -> AbortController for the in-flight save
 
 async function loadJobs() {
   const { jobs: stored } = await chrome.storage.session.get('jobs');
@@ -76,11 +77,14 @@ function notify(job) {
 
 async function runJob(job) {
   const { helperUrl, token, saveSubdir, includeTags } = await getSettings();
+  const controller = new AbortController();
+  controllers.set(job.id, controller);
   try {
     const r = await fetch(`${helperUrl}/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-later-brain-token': token },
       body: JSON.stringify({ url: job.url, saveSubdir, includeTags }),
+      signal: controller.signal,
     });
     const data = await r.json();
     if (data.ok) {
@@ -93,8 +97,14 @@ async function runJob(job) {
       job.error = data.error === 'no_transcript' ? 'No transcript found' : (data.error || 'save failed');
     }
   } catch (e) {
-    job.state = 'error';
-    job.error = `Helper unreachable (${e.message})`;
+    if (controller.signal.aborted) {
+      job.state = 'cancelled';
+    } else {
+      job.state = 'error';
+      job.error = `Helper unreachable (${e.message})`;
+    }
+  } finally {
+    controllers.delete(job.id);
   }
   job.finishedAt = Date.now();
   job.acked = false;
@@ -132,7 +142,7 @@ async function enqueue(url, title) {
   });
   // Trim oldest FINISHED jobs beyond the history cap; never drop active ones.
   const active = jobs.filter((j) => j.state === 'queued' || j.state === 'working');
-  const finished = jobs.filter((j) => j.state === 'done' || j.state === 'error').slice(0, MAX_HISTORY);
+  const finished = jobs.filter((j) => j.state === 'done' || j.state === 'error' || j.state === 'cancelled').slice(0, MAX_HISTORY);
   jobs = [...active, ...finished].sort((a, b) => b.createdAt - a.createdAt);
   await saveJobs();
   processQueue();
@@ -153,6 +163,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     (changed ? saveJobs() : Promise.resolve()).then(() => sendResponse({ ok: true }));
     return true;
   }
+  if (msg.type === 'cancel') {
+    cancelJob(jobs.find((j) => j.id === msg.id));
+    saveJobs().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (msg.type === 'cancel-all') {
+    for (const j of [...jobs]) cancelJob(j);
+    saveJobs().then(() => sendResponse({ ok: true }));
+    return true;
+  }
   if (msg.type === 'clear-finished') {
     jobs = jobs.filter((j) => j.state === 'queued' || j.state === 'working');
     saveJobs().then(() => sendResponse({ ok: true }));
@@ -160,6 +180,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   return false;
 });
+
+// Cancel a queued or working job. Aborting a working job's controller closes
+// the request, which makes the helper kill its yt-dlp/claude child processes.
+function cancelJob(job) {
+  if (!job) return;
+  if (job.state === 'working') {
+    const c = controllers.get(job.id);
+    if (c) { c.abort(); return; } // runJob's catch marks it 'cancelled'
+  }
+  if (job.state === 'working' || job.state === 'queued') {
+    job.state = 'cancelled';
+    job.finishedAt = Date.now();
+  }
+}
 
 async function openNoteFromNotif(notifId) {
   const id = notifId.replace(NOTIF_PREFIX, '');
