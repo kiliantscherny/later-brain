@@ -14,28 +14,20 @@ fi
 
 CFG="$DIR/helper/config.json"
 if [ ! -f "$CFG" ]; then
-  # --- choose the Obsidian vault -------------------------------------------
-  echo "==> Looking for Obsidian vaults…"
-  VAULTS=()
-  while IFS= read -r d; do
-    [ -n "$d" ] && VAULTS+=("$d")
-  done < <(find "$HOME/Documents" "$HOME/Obsidian" "$HOME/Library/Mobile Documents" -maxdepth 4 -type d -name .obsidian 2>/dev/null | sed 's#/\.obsidian$##' | sort -u)
-
-  VAULT=""
-  if [ "${#VAULTS[@]}" -gt 0 ]; then
-    echo "Found:"
-    i=1; for v in "${VAULTS[@]}"; do echo "  $i) $v"; i=$((i+1)); done
-    echo "  $i) Enter a different path"
-    read -rp "Choose your vault [1-$i]: " choice
-    if [ "$choice" -ge 1 ] 2>/dev/null && [ "$choice" -le "${#VAULTS[@]}" ] 2>/dev/null; then
-      VAULT="${VAULTS[$((choice-1))]}"
-    fi
-  fi
-  if [ -z "$VAULT" ]; then
-    read -rp "Enter the full path to your Obsidian vault: " VAULT
-  fi
-  VAULT="${VAULT/#\~/$HOME}"
+  # --- ask for the Obsidian vault path (entered manually) ------------------
+  echo "==> Where is your Obsidian vault?"
+  echo "    Enter the FULL path to the vault folder (the one containing your"
+  echo "    notes and a hidden .obsidian directory). Example:"
+  echo "    /Users/you/Documents/My Vault"
+  read -rp "Vault path: " VAULT
+  VAULT="${VAULT/#\~/$HOME}"          # allow a leading ~
+  VAULT="${VAULT%/}"                  # strip a trailing slash
+  [ -n "$VAULT" ] || { echo "No path entered."; exit 1; }
   [ -d "$VAULT" ] || { echo "Not a directory: $VAULT"; exit 1; }
+  if [ ! -d "$VAULT/.obsidian" ]; then
+    read -rp "Warning: no .obsidian folder found there — use it anyway? [y/N] " ok
+    [ "$ok" = y ] || [ "$ok" = Y ] || { echo "Aborted."; exit 1; }
+  fi
 
   # --- write config.json (via Node so paths are JSON-escaped safely) -------
   TOKEN="$(openssl rand -hex 24)"

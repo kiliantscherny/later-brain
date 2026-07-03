@@ -36,7 +36,7 @@ https://github.com/kiliantscherny/later-brain on my Mac:
    sensible location like ~/Developer/later-brain if it isn't already there.
 2. Make sure Node 18+, the `claude` CLI, and `yt-dlp` are installed
    (brew install yt-dlp if missing).
-3. Run ./install.sh from the repo root. It will let me pick my Obsidian vault,
+3. Run ./install.sh from the repo root. It will ask me for my Obsidian vault path (entered manually),
    generate a config with a random token, and install a launchd agent that runs
    the helper in the background. Show me the token it prints.
 4. Verify the helper: `curl http://127.0.0.1:41484/health` should return {"ok":true}.
@@ -57,7 +57,7 @@ cd later-brain
 
 `install.sh` will:
 - check `node`, `claude`, and `yt-dlp` (offering to install yt-dlp),
-- **detect your Obsidian vault(s)** and let you choose (or type a path),
+- **ask you for your Obsidian vault path** (you type it in),
 - write `helper/config.json` with a random **token**,
 - install + start a `launchd` agent so the helper runs on login,
 - print your **token**.
