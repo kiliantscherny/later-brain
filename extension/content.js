@@ -79,9 +79,12 @@ function showFor(anchor) {
   const rect = anchor.getBoundingClientRect();
   if (rect.width < 80 || rect.height < 50) return; // skip tiny/hidden thumbnails
   const btn = getButton();
+  // Keep the green ✓ only when re-hovering the SAME video we just queued;
+  // any other thumbnail must show the idle icon (the button is shared).
+  const keepDone = btn.dataset.state === 'done' && btn.dataset.url === url;
   btn.dataset.url = url;
   btn.dataset.title = titleFor(anchor);
-  if (btn.dataset.state !== 'done') setIdle(btn);
+  if (!keepDone) setIdle(btn);
   btn.style.top = `${Math.round(rect.top + 8)}px`;
   btn.style.left = `${Math.round(rect.left + 8)}px`;
   btn.style.display = 'flex';
@@ -117,7 +120,7 @@ async function onClick(e) {
   }
   btn.dataset.state = 'done';
   clearTimeout(hideTimer);
-  setTimeout(hide, 900);
+  hideTimer = setTimeout(hide, 1000);
 }
 
 // Find the thumbnail anchor under the cursor (image link, not the title text).
