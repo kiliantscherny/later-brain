@@ -48,9 +48,20 @@ function buildButton() {
   img.alt = 'Save';
   Object.assign(img.style, { width: '26px', height: '26px', display: 'block' });
 
-  const check = document.createElement('span');
-  check.textContent = '✓';
-  Object.assign(check.style, { display: 'none', color: '#fff', fontSize: '20px', fontWeight: '700' });
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const check = document.createElementNS(svgNS, 'svg');
+  check.setAttribute('viewBox', '0 0 24 24');
+  check.setAttribute('width', '22');
+  check.setAttribute('height', '22');
+  check.style.display = 'none';
+  const path = document.createElementNS(svgNS, 'path');
+  path.setAttribute('d', 'M5 12.5l4.2 4.2L19 7');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', '#fff');
+  path.setAttribute('stroke-width', '3');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  check.appendChild(path);
 
   btn.append(img, check);
   btn.addEventListener('mouseover', (e) => { e.stopPropagation(); clearTimeout(hideTimer); });
@@ -69,7 +80,7 @@ function setIdle(btn) {
   btn.dataset.state = 'idle';
   btn.style.background = '#fff';
   btn.querySelector('img').style.display = 'block';
-  btn.querySelector('span').style.display = 'none';
+  btn.querySelector('svg').style.display = 'none';
   btn.title = 'Save to later-brain';
 }
 
@@ -111,7 +122,7 @@ async function onClick(e) {
   btn.dataset.state = 'busy';
   btn.style.background = '#2E9E5B';
   btn.querySelector('img').style.display = 'none';
-  btn.querySelector('span').style.display = 'block';
+  btn.querySelector('svg').style.display = 'block';
   btn.title = 'Queued ✓';
   try {
     await chrome.runtime.sendMessage({ type: 'start-save', url, title: btn.dataset.title || '' });
