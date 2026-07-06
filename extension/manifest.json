@@ -6,6 +6,19 @@
   "permissions": ["activeTab", "tabs", "storage", "notifications", "clipboardWrite"],
   "host_permissions": ["http://127.0.0.1:41484/*"],
   "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/icon48.png"],
+      "matches": ["*://*.youtube.com/*"]
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Save to later-brain",

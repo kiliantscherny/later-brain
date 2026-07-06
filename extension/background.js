@@ -92,6 +92,11 @@ async function runJob(job) {
       job.skipped = Boolean(data.skipped);
       job.obsidianUri = data.obsidianUri;
       job.notePath = data.notePath;
+      // Backfill the display title from the saved note when we didn't have one
+      // (e.g. a thumbnail hover-save where the DOM title wasn't found).
+      if (!job.title && data.notePath) {
+        job.title = data.notePath.split('/').pop().replace(/\.md$/, '');
+      }
     } else {
       job.state = 'error';
       job.error = data.error === 'no_transcript' ? 'No transcript found' : (data.error || 'save failed');
